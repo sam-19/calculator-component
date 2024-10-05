@@ -1,0 +1,23 @@
+{
+  "name": "calculator-component",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --force",
+    "build": "npm run build:package && npm run build:standalone",
+    "build:package": "tsc && vite build --config vite.config.package.ts",
+    "build:standalone": "tsc && vite build --config vite.config.standalone.ts",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "lit": "^3.2.0",
+    "mathjs": "^13.1.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.3",
+    "vite": "^5.4.1",
+    "vite-plugin-singlefile": "^2.0.2",
+    "vite-tsconfig-paths": "^5.0.1"
+  }
+}
