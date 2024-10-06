@@ -24,6 +24,7 @@
     "build": "npm run build:package && npm run build:standalone",
     "build:package": "tsc && vite build --config vite.config.package.ts",
     "build:standalone": "tsc && vite build --config vite.config.standalone.ts",
+    "prepack": "npm run build",
     "preview": "vite preview",
     "release": "npm publish --access=public"
   },
