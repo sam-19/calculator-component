@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite'
-import { dirname, resolve } from 'path'
+import { resolve } from 'path'
 import { fileURLToPath, URL } from 'url'
 import { viteSingleFile } from 'vite-plugin-singlefile'
 
@@ -12,7 +12,7 @@ export default defineConfig({
             fileName: 'calculator-component',
         },
         minify: 'esbuild',
-        outDir: resolve(__dirname, 'build', 'package'),
+        outDir: resolve(__dirname, 'umd'),
         rollupOptions: {
             external: [],
             output: {

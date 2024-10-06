@@ -13,7 +13,7 @@ export default defineConfig({
             fileName: 'calculator',
         },
         minify: 'esbuild',
-        outDir: resolve(__dirname, 'build', 'standalone'),
+        outDir: resolve(__dirname, 'build'),
         rollupOptions: {
             external: [],
             output: {
