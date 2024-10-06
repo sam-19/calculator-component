@@ -7,7 +7,7 @@
 
 import { LitElement, css, html } from 'lit'
 import { customElement, property } from 'lit/decorators.js'
-import { inlineWorker } from '.'
+import { inlineWorker } from '#assets'
 
 type ExpressionElement = {
     display: string
