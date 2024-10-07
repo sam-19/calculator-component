@@ -1,7 +1,6 @@
 import { defineConfig } from 'vite'
 import { resolve } from 'path'
 import { fileURLToPath, URL } from 'url'
-import { viteSingleFile } from 'vite-plugin-singlefile'
 
 export default defineConfig({
     mode: 'production',
@@ -28,10 +27,7 @@ export default defineConfig({
         esbuildOptions: {
             target: 'esnext',
         },
-     },
-    plugins: [
-        viteSingleFile(),
-    ],
+    },
     define: {
         __INTLIFY_JIT_COMPILATION__: true,
         'process.env': process.env,

@@ -7,7 +7,7 @@
 
 import { LitElement, css, html } from 'lit'
 import { customElement, property } from 'lit/decorators.js'
-import { inlineWorker } from '#assets'
+import { inlineWorker } from './assets'
 
 type ExpressionElement = {
     display: string
@@ -68,6 +68,9 @@ export default class BasicCalculator extends LitElement {
 
     @property({ type: String })
     screenText = ''
+
+    @property({ attribute: 'is-fixed', type: Boolean })
+    isFixed = false
 
     @property({ type: Number })
     unclosedParentheses = 0
@@ -289,6 +292,40 @@ export default class BasicCalculator extends LitElement {
 
     // Render the UI.
     render () {
+        const root = document.querySelector(':root') as HTMLHtmlElement
+        const parent = this.parentElement as HTMLDivElement
+        if (!root || !parent) {
+            return
+        }
+        const parentStyles = getComputedStyle(parent)
+        const hPads = parseFloat(parentStyles.paddingLeft) + parseFloat(parentStyles.paddingRight)
+        const vPads = parseFloat(parentStyles.paddingTop) + parseFloat(parentStyles.paddingBottom)
+        const parentW = parent.offsetWidth - hPads
+        const parentH = parent.offsetHeight - vPads
+        if (
+            this.isFixed &&
+            ( 
+                parentW/root.offsetWidth < 1 ||
+                parentH/root.offsetHeight < 1
+            ) 
+        ) {
+            const aspect = 2/3
+            const refWidth = parentW/parentH <= aspect
+                           ? parentW
+                           : aspect*parentH
+            const refHeight = parentW/parentH >= aspect
+                            ? parentH
+                            : parentW/aspect
+            this.style.setProperty('--height-full', `${refHeight}px`)
+            this.style.setProperty('--width-full', `${refWidth}px`)
+            this.style.setProperty('--size-small', `${0.015*refHeight}px`)
+            this.style.setProperty('--size-medium', `${0.025*refHeight}px`)
+            this.style.setProperty('--size-large', `${0.05*refHeight}px`)
+            this.style.setProperty('--screen-height', `${0.085*refHeight}px`)
+            this.style.setProperty('--input-height', `${0.06*refHeight}px`)
+            this.style.setProperty('--padding-small', `${0.005*refHeight}px`)
+            this.style.setProperty('--padding-medium', `${0.01*refHeight}px`)
+        }
         return html`
         <div class="calculator" part="calculator">
             <div class="screen" part="screen">
@@ -612,7 +649,7 @@ export default class BasicCalculator extends LitElement {
     // Styles.
     static styles = css`
     :host {
-        font-size: min(4vw, 2.5vh);
+        font-size: var(--size-medium);
         font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
         line-height: 1.5;
         font-weight: 400;
@@ -628,10 +665,21 @@ export default class BasicCalculator extends LitElement {
         text-rendering: optimizeLegibility;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
+
+        /* Variables */
+        --height-full: min(150vw, 100vh);
+        --width-full: min(100vw, 67vh);
+        --size-small: min(2.5vw, 1.5vh);
+        --size-medium: min(4vw, 2.5vh);
+        --size-large: min(8vw, 5vh);
+        --screen-height: min(14vw, 8.5vh);
+        --input-height: min(10vw, 6vh);
+        --padding-small: min(1vw, 0.5vh);
+        --padding-medium: min(2vw, 1vh);
     }
     .calculator {
         width: 100%;
-        height: min(150vw, 100vh);
+        height: var(--height-full);
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -639,30 +687,29 @@ export default class BasicCalculator extends LitElement {
         box-sizing: content-box;
     }
     .screen {
-        width: min(100vw, 67vh);
-        flex: 0 0 min(14vw, 8.5vh);
+        width: var(--width-full);
+        flex: 0 0 var(--screen-height);
         color: #444;
         background-color: #FAFAFF;
-        border-radius: min(2vw, 1vh) min(2vw, 1vh) 0 0;
+        border-radius: var(--padding-medium) var(--padding-medium) 0 0;
         outline: 1px solid rgba(63, 63, 127, 0.1);
     }
     .history {
         width: 100%;
-        height: min(8vw, 5vh);
-        font-size: min(4vw, 2.5vh);
+        height: var(--size-large);
         box-sizing: border-box;
         margin: 0;
-        padding: min(2vw, 1vh) min(2vw, 1vh) 0 min(2vw, 1vh);
+        padding: var(--padding-medium) var(--padding-medium) 0 var(--padding-medium);
         text-align: left;
         opacity: 0.6;
         overflow: hidden;
     }
     .input {
-        width: calc(100% - min(8vw, 5vh));
-        height: min(10vw, 6vh);
+        width: calc(100% - var(--size-large));
+        height: var(--input-height);
         border: none;
-        font-size: min(8vw, 5vh);
-        padding: min(4vw, 2.5vh);
+        font-size: 2em;
+        padding: var(--size-medium);
         text-align: right;
         display: flex;
         align-items: baseline;
@@ -686,7 +733,7 @@ export default class BasicCalculator extends LitElement {
         justify-content: stretch;
         min-height: 0;
         flex-grow: 1;
-        width: min(100vw, 67vh);
+        width: var(--width-full);
         cursor: pointer;
         -moz-user-select: none;
         -khtml-user-select: none;
@@ -709,7 +756,7 @@ export default class BasicCalculator extends LitElement {
             justify-content: center;
             box-sizing: border-box;
             width: 100%;
-            padding: min(1vw, 0.5vh);
+            padding: var(--padding-small);
             background-color: #F0F0FF;
             color: #333;
             outline: 1px solid rgba(60, 60, 120, 0.1);
@@ -718,11 +765,11 @@ export default class BasicCalculator extends LitElement {
             transition: all 0.2s;
         }
         .key:hover:not(.disabled) {
-            box-shadow: 0 0 min(1vw, 0.5vh) 0 rgba(63, 63, 223, 0.5);
+            box-shadow: 0 0 var(--padding-small) 0 rgba(63, 63, 223, 0.5);
             z-index: 1;
         }
         .key:active:not(.disabled), .key.active:not(.disabled) {
-            box-shadow: inset 0 0 5px 0 rgba(63, 63, 223, 0.5);
+            box-shadow: inset 0 0 var(--padding-small) 0 rgba(63, 63, 223, 0.5);
         }
             .key-num {
                 background-color: #FDFDFD;
@@ -744,10 +791,10 @@ export default class BasicCalculator extends LitElement {
             cursor: default;
         }
         .bottom-row div:first-child {
-            border-radius: 0 0 0 min(2vw, 1vh);
+            border-radius: 0 0 0 var(--padding-medium);
         }
         .bottom-row div:last-child {
-            border-radius: 0 0 min(2vw, 1vh) 0;
+            border-radius: 0 0 var(--padding-medium) 0;
         }
         .inv {
             display: none;
@@ -756,11 +803,11 @@ export default class BasicCalculator extends LitElement {
             vertical-align: super;
             position: relative;
             top: -0.3em;
-            font-size: min(2.5vw, 1.5vh);
+            font-size: 0.67em;
         }
             sup.char {
                 /* Make the small x easier to see with slightly larger font. */
-                font-size: min(3vw, 1.75vh);
+                font-size: 0.75em;
             }
     `
 }
