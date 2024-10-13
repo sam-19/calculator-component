@@ -21,6 +21,7 @@ type HistoryEntry = {
     answerReal: number | null
     error: string | null
     expression: ExpressionElement[]
+    latex: string | null
 }
 
 import workerSrc from '../dist/mathjs-worker?raw'
@@ -71,6 +72,9 @@ export default class BasicCalculator extends LitElement {
 
     @property({ attribute: 'is-fixed', type: Boolean })
     isFixed = false
+
+    @property({ type: String })
+    latex: string | null = null
 
     @property({ type: Number })
     unclosedParentheses = 0
@@ -154,23 +158,28 @@ export default class BasicCalculator extends LitElement {
             this.answerReal = null
             this.answerImg = null
             this.error = message.data.error
-        } else if (Object.hasOwn(message.data.result, 're')) {
-            this.answerReal = message.data.result.re
-            this.answerImg = message.data.result.im
-            this.answer = this._numToPrecision(message.data.result.re as number, 6)
-            if (message.data.result.im as number < 0) {
-                this.answer += `-${ this._numToPrecision(-(message.data.result.im as number), 6) }i`
-            } else {
-                this.answer += `+${ this._numToPrecision(message.data.result.im as number, 6) }i`
-            }
+            this.latex = null
         } else if (String(message.data.result) === message.data.expression) {
-            // Probably a missclick, don't transfer this history.
+            // Probably a misclick, don't transfer this to history.
             return
         } else {
-            this.answerReal = message.data.result
-            this.answerImg = null
-            this.answer = this._numToPrecision(message.data.result as number, 12)
-        }
+            if (Object.hasOwn(message.data.result, 're')) {
+                this.answerReal = message.data.result.re
+                this.answerImg = message.data.result.im
+                this.answer = this._numToPrecision(message.data.result.re as number, 6)
+                if (message.data.result.im as number < 0) {
+                    this.answer += `-${ this._numToPrecision(-(message.data.result.im as number), 6) }i`
+                } else {
+                    this.answer += `+${ this._numToPrecision(message.data.result.im as number, 6) }i`
+                }
+                this.latex = `${message.data.latex} = ${this.answer}`
+            } else {
+                this.answerReal = message.data.result
+                this.answerImg = null
+                this.answer = this._numToPrecision(message.data.result as number, 12)
+                this.latex = `${message.data.latex} = ${this._numToPrecision(message.data.result as number, 9)}`
+            }
+        } 
         const closingParentheses = [] as ExpressionElement[]
         for (let i=0; i<this.unclosedParentheses; i++) {
             closingParentheses.push({
@@ -179,16 +188,34 @@ export default class BasicCalculator extends LitElement {
                 type: 'symbol',
             })
         }
+        const fullExpression = [...this.expression, ...closingParentheses]
         this.history.push({
             answer: this.answer,
             answerImg: this.answerImg,
             answerReal: this.answerReal,
             error: this.error,
-            expression: [...this.expression, ...closingParentheses],
+            expression: fullExpression,
+            latex: this.latex,
         })
         this.expression = []
         this._udpateInput()
         this._updateHistory()
+        const event = new CustomEvent(
+            'result', 
+            { 
+                detail: {
+                    answer: message.data.result,
+                    complex: message.data.result === null ? null : {
+                        im: this.answerImg,
+                        re: this.answerReal,
+                    },
+                    error: message.data.error,
+                    expression: fullExpression.map(e => e.element).join(''),
+                    latex: this.latex,
+                }
+            }
+        )
+        this.dispatchEvent(event)
     }
     private _input (exp: string, expType: ExpressionType, display?: string) {
         // Don't allow inputting certain elements if they are not active.
@@ -260,6 +287,7 @@ export default class BasicCalculator extends LitElement {
         this.expression = []
         this.history = []
         this.invTrig = false
+        this.latex = null
         this.unclosedParentheses = 0
         this._udpateInput()
         this._updateHistory()

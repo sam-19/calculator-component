@@ -12,4 +12,9 @@
       <h1>Calculator is loading...</h1>
     </basic-calculator>
   </body>
+  <script>
+    document.querySelector('basic-calculator')?.addEventListener('result', (event) => {
+      console.log('Result', event.detail)
+    })
+  </script>
 </html>

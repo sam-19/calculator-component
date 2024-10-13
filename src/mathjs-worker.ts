@@ -87,6 +87,7 @@ self.onmessage = (message) => {
                 detail: String(e),
                 error: 'Configuration error',
                 expression: message.data.expression,
+                latex: null,
                 result: null,
             })
         }
@@ -95,21 +96,28 @@ self.onmessage = (message) => {
         self.postMessage({
             error: 'No expression',
             expression: null,
+            latex: null,
             result: null,
         })
         return
     }
     try {
-        const result = self.math.evaluate(message.data.expression)
+        const node = self.math.parse(message.data.expression)
+        const result = node.evaluate()
+        const latex = node.toTex()
         self.postMessage({
+            error: null,
             expression: message.data.expression,
+            latex: latex,
             result: result,
         })
     } catch (e) {
+        console.error(e)
         self.postMessage({
             detail: String(e),
             error: 'Syntax error',
             expression: message.data.expression,
+            latex: null,
             result: null,
         })
     }
