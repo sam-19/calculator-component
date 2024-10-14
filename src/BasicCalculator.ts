@@ -144,7 +144,7 @@ export default class BasicCalculator extends LitElement {
             return
         }
         const ansComplex = this.answerImg === null
-                         ? lastEntry.answerReal?.toFixed()
+                         ? lastEntry.answerReal?.toString()
                          : `${this.answerReal}${
                                 this.answerImg < 0 ? '-' : '+'
                             }${this.answerImg}`
