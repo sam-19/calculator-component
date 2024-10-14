@@ -9,18 +9,34 @@ import { LitElement, css, html } from 'lit'
 import { customElement, property } from 'lit/decorators.js'
 import { inlineWorker } from './assets'
 
-type ExpressionElement = {
+/**
+ * A single node (or entity) of a mathematical expression.
+ * Can be a digit, operator, function name etc.
+ */
+type ExpressionNode = {
+    /** Text as it displayed to the user. */
     display: string
+    /** The text element used for the MathJs expression. */
     element: string
-    type: ExpressionType
+    /** Type of this node. */
+    type: NodeType
 }
-type ExpressionType = 'function' | 'modifier' | 'number' | 'operator' | 'symbol'
+type NodeType = 'function' | 'modifier' | 'number' | 'operator' | 'symbol'
+/**
+ * Properties of a previously evaluated expression.
+ */
 type HistoryEntry = {
+    /** The answer of the expression, as it was displayed on the screen; null if there was an error. */
     answer: string | null
+    /** The imaginary number part of the answer, or null if the answer was not a complex number. */
     answerImg: number | null
+    /** The real number part of the answer, null if there was an error. */
     answerReal: number | null
+    /** Error from the expression, null if there was no error. */
     error: string | null
-    expression: ExpressionElement[]
+    /** Node array of the expression. */
+    expression: ExpressionNode[]
+    /** LaTeX string of the expression and answer, null if there was an error. */
     latex: string | null
 }
 
@@ -52,11 +68,15 @@ export default class BasicCalculator extends LitElement {
     @property({ type: String })
     autoComplete = ''
 
+    @property({ attribute: 'decimal-separator', type: String })
+    // Make a guess for the default separator, can be overridden with component attribute.
+    decimalSeparator = (0.1).toLocaleString().replace(/\d/g, '')
+
     @property({ type: String })
     error: string | null = null
 
     @property({ type: Array })
-    expression: ExpressionElement[] = []
+    expression: ExpressionNode[] = []
 
     @property({ type: Array })
     history: HistoryEntry[] = []
@@ -88,7 +108,7 @@ export default class BasicCalculator extends LitElement {
                )
     }
     private get _operatorsActive () {
-        const incompatibleTypes = ['function', 'modifier', 'operator'] as ExpressionType[]
+        const incompatibleTypes = ['function', 'modifier', 'operator'] as NodeType[]
         // Expression or function cannot start with an operator (other than the minus sign),
         // and we cannot use multiple operators in a row.
         return this.answer ||
@@ -123,7 +143,12 @@ export default class BasicCalculator extends LitElement {
         if (!lastEntry?.answer) {
             return
         }
-        this._input(`(${lastEntry.answer})`, 'number', 'Ans')
+        const ansComplex = this.answerImg === null
+                         ? lastEntry.answerReal?.toFixed()
+                         : `${this.answerReal}${
+                                this.answerImg < 0 ? '-' : '+'
+                            }${this.answerImg}`
+        this._input(`(${ansComplex})`, 'number', 'Ans')
     }
     private _capitalize (text: string) {
         return `${text.charAt(0).toLocaleUpperCase()}${text.slice(1)}`
@@ -138,6 +163,10 @@ export default class BasicCalculator extends LitElement {
             this.expression.pop()
         }
         this._udpateInput()
+    }
+    /** Convert dots in the given text into locale-appropriate decimal separators. */
+    private _decSep (text: string) {
+        return text.replace('.', this.decimalSeparator)
     }
     private _evaluateExpression () {
         if (!this.expression?.length) {
@@ -172,15 +201,19 @@ export default class BasicCalculator extends LitElement {
                 } else {
                     this.answer += `+${ this._numToPrecision(message.data.result.im as number, 6) }i`
                 }
-                this.latex = `${message.data.latex} = ${this.answer}`
+                this.latex = `${this._decSep(message.data.latex)} = ${this.answer}`
             } else {
                 this.answerReal = message.data.result
                 this.answerImg = null
                 this.answer = this._numToPrecision(message.data.result as number, 12)
-                this.latex = `${message.data.latex} = ${this._numToPrecision(message.data.result as number, 9)}`
+                this.latex = `${
+                    this._decSep(message.data.latex)
+                } = ${
+                    this._numToPrecision(message.data.result as number, 9)
+                }`
             }
         } 
-        const closingParentheses = [] as ExpressionElement[]
+        const closingParentheses = [] as ExpressionNode[]
         for (let i=0; i<this.unclosedParentheses; i++) {
             closingParentheses.push({
                 display: ')',
@@ -217,7 +250,7 @@ export default class BasicCalculator extends LitElement {
         )
         this.dispatchEvent(event)
     }
-    private _input (exp: string, expType: ExpressionType, display?: string) {
+    private _input (exp: string, expType: NodeType, display?: string) {
         // Don't allow inputting certain elements if they are not active.
         if (expType == 'modifier' && !this._modifiersActive) {
             return
@@ -267,7 +300,8 @@ export default class BasicCalculator extends LitElement {
         if (display.includes('.')) {
             display = display.replace(/0+$/, '')
         }
-        return display
+        // Return the stripped value with locale-appropriate decimal separator.
+        return this._decSep(display)
     }
     private _rand () {
         const lastItem = this.expression[this.expression.length - 1]
@@ -622,8 +656,8 @@ export default class BasicCalculator extends LitElement {
                         part="key key-num${this._modifiersActive ? '' : ' disabled' }"
                         title="Decimal separator"
                         aria-label="Decimal separator"
-                        @click=${{ handleEvent: () => this._input('.', 'modifier') }}
-                    >.</div>
+                        @click=${{ handleEvent: () => this._input('.', 'modifier', this.decimalSeparator) }}
+                    >${ this.decimalSeparator }</div>
                     <div
                         class="key key-num${this._modifiersActive ? '' : ' disabled' }"
                         part="key key-num${this._modifiersActive ? '' : ' disabled' }"
@@ -655,8 +689,8 @@ export default class BasicCalculator extends LitElement {
                         @click=${{ handleEvent: () => this._input(')', 'symbol') }}
                     >)</div>
                     <div
-                        class="key key-ans"
-                        part="key key-ans"
+                        class="key key-ans${ this.history.length > 0 ? '' : ' disabled' }"
+                        part="key key-ans${ this.history.length > 0 ? '' : ' disabled' }"
                         title="Insert previous answer"
                         aria-label="Insert previous answer"
                         @click=${{ handleEvent: () => this._ans() }}
@@ -815,7 +849,7 @@ export default class BasicCalculator extends LitElement {
                 outline: 1px solid rgba(63, 63, 127, 0.5);
             }
         .key:disabled, .key.disabled {
-            color: #777;
+            color: #888;
             cursor: default;
         }
         .bottom-row div:first-child {
