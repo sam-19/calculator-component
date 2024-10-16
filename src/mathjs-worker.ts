@@ -104,7 +104,10 @@ self.onmessage = (message) => {
     try {
         const node = self.math.parse(message.data.expression)
         const result = node.evaluate()
-        const latex = node.toTex()
+        // Pi has to wrapped in parentheses in the expression to allow combining it with
+        // the imaginary number designator i, for example. Remove the parentheses from
+        // LaTeX output.
+        const latex = node.toTex().replace('~\\left(\\pi\\right)', '\\pi')
         self.postMessage({
             error: null,
             expression: message.data.expression,

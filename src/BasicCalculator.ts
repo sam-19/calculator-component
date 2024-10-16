@@ -101,11 +101,17 @@ export default class BasicCalculator extends LitElement {
 
     // Getters.
     private get _modifiersActive () {
-        return (this.answer && this.answerImg === null) ||
-               (
-                this.expression.length > 0 &&
-                this.expression[this.expression.length - 1].type === 'number'
-               )
+        if (!this.expression.length) {
+            // See if can append the modifier into the currently visible answer.
+            return (this.answer && this.answerImg === null) ? true : false
+        }
+        const lastNode = this.expression[this.expression.length - 1]
+        return (
+            // We can append a modifier to a number or a symbol, unless it's an opening parenthese.
+            lastNode.type === 'number' || (
+                lastNode.type === 'symbol' && lastNode.element !== '('
+            )
+        )
     }
     private get _operatorsActive () {
         const incompatibleTypes = ['function', 'modifier', 'operator'] as NodeType[]
@@ -148,7 +154,12 @@ export default class BasicCalculator extends LitElement {
                          : `${this.answerReal}${
                                 this.answerImg < 0 ? '-' : '+'
                             }${this.answerImg}`
-        this._input(`(${ansComplex})`, 'number', 'Ans')
+        // Input simple numbers as is, else wrap in parentheses.
+        if (ansComplex?.match(/[^0-9.]/)) {
+            this._input(`(${ansComplex})`, 'number', 'Ans')
+        } else {
+            this._input(`${ansComplex}`, 'number', 'Ans')
+        }
     }
     private _capitalize (text: string) {
         return `${text.charAt(0).toLocaleUpperCase()}${text.slice(1)}`
