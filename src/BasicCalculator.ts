@@ -38,6 +38,8 @@ type HistoryEntry = {
     expression: ExpressionNode[]
     /** LaTeX string of the expression and answer, null if there was an error. */
     latex: string | null
+    /** Is the result rounded. */
+    round: boolean
 }
 
 import workerSrc from '../dist/mathjs-worker?raw'
@@ -87,14 +89,17 @@ export default class BasicCalculator extends LitElement {
     @property({ type: Boolean })
     invTrig = false
 
-    @property({ type: String })
-    screenText = ''
-
     @property({ attribute: 'is-fixed', type: Boolean })
     isFixed = false
 
     @property({ type: String })
     latex: string | null = null
+
+    @property({ type: String })
+    screenText = ''
+
+    @property({ attribute: 'thousand-separator', type: String })
+    thousandSeparator = ' '
 
     @property({ type: Number })
     unclosedParentheses = 0
@@ -179,7 +184,7 @@ export default class BasicCalculator extends LitElement {
     private _decSep (text: string) {
         return text.replace('.', this.decimalSeparator)
     }
-    private _evaluateExpression () {
+    private _evaluateExpression (e: PointerEvent) {
         if (!this.expression?.length) {
             return
         }
@@ -187,7 +192,45 @@ export default class BasicCalculator extends LitElement {
                          + this.autoComplete
         worker.postMessage({
             expression: expression,
+            round: e.shiftKey,
         })
+    }
+    private _formatNumbers (expression: string) {
+        if (!this.thousandSeparator) {
+            return expression
+        }
+        const numRegexp = new RegExp(`([0-9]+\\${this.decimalSeparator}?[0-9]*)`)
+        const expParts = expression.split(numRegexp)
+        for (let i=1; i<expParts.length; i++) {
+            if (!expParts[i].match(numRegexp)) {
+                continue
+            }
+            const nodes = expParts[i].split('')
+            nodes.reverse()
+            let consecDigs = -1
+            let decimal = nodes.includes(this.decimalSeparator)
+            for (let j=0; j<nodes.length; j++) {
+                if (decimal) {
+                    if (nodes[j] === this.decimalSeparator) {
+                        decimal = false
+                    } else {
+                        continue
+                    }
+                }
+                if (nodes[j].match(/^\d$/)) {
+                    consecDigs++
+                } else {
+                    consecDigs = -1
+                }
+                if (consecDigs === 3) {
+                    nodes[j] += this.thousandSeparator
+                    consecDigs = 0
+                }
+            }
+            nodes.reverse()
+            expParts[i] =  nodes.join('')
+        }
+        return expParts.join('')
     }
     private _handleWorkerResponse (message: MessageEvent) {
         if (!message?.data) {
@@ -212,17 +255,22 @@ export default class BasicCalculator extends LitElement {
                 } else {
                     this.answer += `+${ this._numToPrecision(message.data.result.im as number, 6) }i`
                 }
-                this.latex = `${this._decSep(message.data.latex)} = ${this.answer}`
+                this.latex = `${
+                    this._decSep(message.data.latex)
+                } ${message.data.round ? '≈' : '=' } ${
+                    this.answer
+                }`
             } else {
                 this.answerReal = message.data.result
                 this.answerImg = null
                 this.answer = this._numToPrecision(message.data.result as number, 12)
                 this.latex = `${
                     this._decSep(message.data.latex)
-                } = ${
+                } ${message.data.round ? '≈' : '=' } ${
                     this._numToPrecision(message.data.result as number, 9)
                 }`
             }
+            this.answer = this._formatNumbers(this.answer)
         } 
         const closingParentheses = [] as ExpressionNode[]
         for (let i=0; i<this.unclosedParentheses; i++) {
@@ -240,6 +288,7 @@ export default class BasicCalculator extends LitElement {
             error: this.error,
             expression: fullExpression,
             latex: this.latex,
+            round: message.data.round,
         })
         this.expression = []
         this._udpateInput()
@@ -256,6 +305,7 @@ export default class BasicCalculator extends LitElement {
                     error: message.data.error,
                     expression: fullExpression.map(e => e.element).join(''),
                     latex: this.latex,
+                    round: message.data.round,
                 }
             }
         )
@@ -344,7 +394,9 @@ export default class BasicCalculator extends LitElement {
         }
         const visibleEntry = this.history[this.history.length - 1]
         this.historyText = visibleEntry.expression.map(e => e.display).join('')
-                         + (visibleEntry.expression.length ? ' = ' : '')
+                         + (visibleEntry.expression.length 
+                            ? ` ${visibleEntry.round ? '≈' : '=' } ` : ''
+                         )
                          + `${ visibleEntry.error ? 'error' : visibleEntry.answer }`
     }
     private _udpateInput () {
@@ -353,7 +405,7 @@ export default class BasicCalculator extends LitElement {
         for (const ex of this.expression) {
             textParts.push(ex.display)
         }
-        this.screenText = textParts.join('')
+        this.screenText = this._formatNumbers(textParts.join(''))
         this.unclosedParentheses = (this.screenText.match(/\(/g) || []).length
                                  - (this.screenText.match(/\)/g) || []).length
         if (this.unclosedParentheses > 0) {
@@ -431,15 +483,15 @@ export default class BasicCalculator extends LitElement {
                     <div
                         class="key key-history"
                         part="key key-history"
-                        title="Clear all entries"
-                        aria-label="Clear all entries"
+                        title="${ this.expression.length ? 'Clear input' : 'Clear history' }"
+                        aria-label="${ this.expression.length ? 'Clear input' : 'Clear history' }"
                         @click=${{ handleEvent: () => this._ac() }}
                     >AC</div>
                     <div
                         class="key key-history"
                         part="key key-history"
-                        title="Clear previous entry"
-                        aria-label="Clear previous entry"
+                        title="Remove last entry"
+                        aria-label="Remove last entry"
                         @click=${{ handleEvent: () => this._ce() }}
                     >CE</div>
                 </div>
@@ -711,7 +763,7 @@ export default class BasicCalculator extends LitElement {
                         part="key key-enter"
                         title="Calculate answer"
                         aria-label="Calculate answer"
-                        @click=${{ handleEvent: () => this._evaluateExpression() }}
+                        @click=${{ handleEvent: (e: PointerEvent) => this._evaluateExpression(e) }}
                     >=</div>
                 </div>
             </div>

@@ -112,7 +112,8 @@ self.onmessage = (message) => {
             error: null,
             expression: message.data.expression,
             latex: latex,
-            result: result,
+            result: message.data.round ? Math.round(result) : result,
+            round: message.data.round,
         })
     } catch (e) {
         console.error(e)
