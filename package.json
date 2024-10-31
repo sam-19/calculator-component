@@ -22,6 +22,7 @@
   "scripts": {
     "dev": "vite --force",
     "build": "npm run build:package && npm run build:standalone",
+    "build:manifest": "node ./node_modules/@custom-elements-manifest/analyzer/cem.js analyze",
     "build:package": "tsc && vite build --config vite.config.package.ts",
     "build:standalone": "tsc && vite build --config vite.config.standalone.ts",
     "prepack": "npm run build",
@@ -33,6 +34,7 @@
     "mathjs": "^13.1.1"
   },
   "devDependencies": {
+    "@custom-elements-manifest/analyzer": "^0.10.3",
     "typescript": "^5.5.3",
     "vite": "^5.4.1",
     "vite-plugin-singlefile": "^2.0.2",
