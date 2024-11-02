@@ -145,9 +145,10 @@
               "kind": "field",
               "name": "angleUnit",
               "type": {
-                "text": "'deg' | 'rad'"
+                "text": "AngleUnit"
               },
-              "default": "'deg'"
+              "default": "'deg'",
+              "description": "Unit of angle measurements, either `deg` for degrees or `rad` for radians."
             },
             {
               "kind": "field",
@@ -155,7 +156,8 @@
               "type": {
                 "text": "string | null"
               },
-              "default": "null"
+              "default": "null",
+              "description": "Answer text as returned by mathjs worker. This will contain correct formatting for\ncomplext numbers to insert into new expressions, for example."
             },
             {
               "kind": "field",
@@ -163,7 +165,8 @@
               "type": {
                 "text": "number | null"
               },
-              "default": "null"
+              "default": "null",
+              "description": "Imaginary component of a complex number answer."
             },
             {
               "kind": "field",
@@ -171,7 +174,17 @@
               "type": {
                 "text": "number | null"
               },
-              "default": "null"
+              "default": "null",
+              "description": "Real number component of the most recent answer.\nIn non-complex number answers this is the actual numberic answer."
+            },
+            {
+              "kind": "field",
+              "name": "answerText",
+              "type": {
+                "text": "string"
+              },
+              "default": "''",
+              "description": "The answer text to display to the user."
             },
             {
               "kind": "field",
@@ -179,11 +192,13 @@
               "type": {
                 "text": "string"
               },
-              "default": "''"
+              "default": "''",
+              "description": "Auto-completion part of the input (basically unclosed parentheses)."
             },
             {
               "kind": "field",
-              "name": "decimalSeparator"
+              "name": "decimalSeparator",
+              "description": "Character to **display** as the decimal separator."
             },
             {
               "kind": "field",
@@ -191,7 +206,8 @@
               "type": {
                 "text": "string | null"
               },
-              "default": "null"
+              "default": "null",
+              "description": "Possible error message from the mathjs worker."
             },
             {
               "kind": "field",
@@ -199,7 +215,8 @@
               "type": {
                 "text": "ExpressionNode[]"
               },
-              "default": "[]"
+              "default": "[]",
+              "description": "Array of input nodes forming the mathematical expression."
             },
             {
               "kind": "field",
@@ -207,7 +224,8 @@
               "type": {
                 "text": "HistoryEntry[]"
               },
-              "default": "[]"
+              "default": "[]",
+              "description": "List of previously evaluated expressions and their answers."
             },
             {
               "kind": "field",
@@ -215,7 +233,8 @@
               "type": {
                 "text": "string"
               },
-              "default": "''"
+              "default": "''",
+              "description": "Most recent entry in the history array parsed as a text string."
             },
             {
               "kind": "field",
@@ -223,7 +242,8 @@
               "type": {
                 "text": "boolean"
               },
-              "default": "false"
+              "default": "false",
+              "description": "Use inverse of trigonometric functions (`acos` instead of `cos`etc.)."
             },
             {
               "kind": "field",
@@ -231,7 +251,8 @@
               "type": {
                 "text": "boolean"
               },
-              "default": "false"
+              "default": "false",
+              "description": "Is the size of the calculator parent element fixed. This will also make the calculator size fixed.\nIf this property is false"
             },
             {
               "kind": "field",
@@ -239,7 +260,8 @@
               "type": {
                 "text": "string | null"
               },
-              "default": "null"
+              "default": "null",
+              "description": "LaTeX expression of the most recent answer."
             },
             {
               "kind": "field",
@@ -247,7 +269,8 @@
               "type": {
                 "text": "string"
               },
-              "default": "''"
+              "default": "''",
+              "description": "Input nodes parsed into text to display on the calculator screen."
             },
             {
               "kind": "field",
@@ -255,7 +278,8 @@
               "type": {
                 "text": "string"
               },
-              "default": "' '"
+              "default": "' '",
+              "description": "Character to **display** as a separator between each power of thousand."
             },
             {
               "kind": "field",
@@ -263,56 +287,50 @@
               "type": {
                 "text": "number"
               },
-              "default": "0"
+              "default": "0",
+              "description": "Number of unclosed parentheses in the current input node array (= expression)."
             },
             {
               "kind": "field",
-              "name": "_modifiersActive",
+              "name": "#modifiersActive",
               "privacy": "private",
               "readonly": true
             },
             {
               "kind": "field",
-              "name": "_operatorsActive",
+              "name": "#operatorsActive",
               "privacy": "private",
               "readonly": true
             },
             {
               "kind": "method",
-              "name": "_ac",
-              "privacy": "private"
-            },
-            {
-              "kind": "method",
-              "name": "_angle",
-              "privacy": "private"
-            },
-            {
-              "kind": "method",
-              "name": "_ans",
-              "privacy": "private"
-            },
-            {
-              "kind": "method",
-              "name": "_capitalize",
+              "name": "#capitalize",
               "privacy": "private",
               "parameters": [
                 {
                   "name": "text",
                   "type": {
                     "text": "string"
-                  }
+                  },
+                  "description": "Text to capitalize."
                 }
-              ]
+              ],
+              "description": "Capitalize a piece of text, i.e. convert the first letter into upper case.",
+              "return": {
+                "type": {
+                  "text": ""
+                }
+              }
             },
             {
               "kind": "method",
-              "name": "_ce",
-              "privacy": "private"
+              "name": "#clearAll",
+              "privacy": "private",
+              "description": "Clear the input node array. If the array is already clear, clear the history."
             },
             {
               "kind": "method",
-              "name": "_decSep",
+              "name": "#convertDecimalSeparators",
               "privacy": "private",
               "parameters": [
                 {
@@ -326,112 +344,178 @@
             },
             {
               "kind": "method",
-              "name": "_evaluateExpression",
+              "name": "#deleteNode",
+              "privacy": "private",
+              "parameters": [
+                {
+                  "name": "index",
+                  "optional": true,
+                  "type": {
+                    "text": "number"
+                  },
+                  "description": "Optional index of the node to delete."
+                }
+              ],
+              "description": "Delete the last node or the node at the given index in the expression array."
+            },
+            {
+              "kind": "method",
+              "name": "#evaluateExpression",
               "privacy": "private",
               "parameters": [
                 {
                   "name": "e",
                   "type": {
                     "text": "PointerEvent"
-                  }
+                  },
+                  "description": "Pointer event that triggered this action."
                 }
-              ]
+              ],
+              "description": "Send the current expression to mathjs worker for evaluation."
             },
             {
               "kind": "method",
-              "name": "_formatNumbers",
+              "name": "#formatNumbers",
               "privacy": "private",
               "parameters": [
                 {
                   "name": "expression",
                   "type": {
                     "text": "string"
-                  }
+                  },
+                  "description": "Expression to format."
                 }
-              ]
+              ],
+              "description": "Format numbers in the given expression, converting decimal separators\nand inserting possible thousand separators.",
+              "return": {
+                "type": {
+                  "text": ""
+                }
+              }
             },
             {
               "kind": "method",
-              "name": "_handleWorkerResponse",
+              "name": "#handleWorkerResponse",
               "privacy": "private",
               "parameters": [
                 {
                   "name": "message",
                   "type": {
                     "text": "MessageEvent"
-                  }
+                  },
+                  "description": "Message from the worker."
                 }
-              ]
+              ],
+              "description": "Handle a response from the mathjs worker."
             },
             {
               "kind": "method",
-              "name": "_input",
+              "name": "#inputNode",
               "privacy": "private",
               "parameters": [
                 {
                   "name": "exp",
                   "type": {
                     "text": "string"
-                  }
+                  },
+                  "description": "Expression text that will be parsed by mathjs."
                 },
                 {
                   "name": "expType",
                   "type": {
                     "text": "NodeType"
-                  }
+                  },
+                  "description": "Type of the node."
                 },
                 {
                   "name": "display",
                   "optional": true,
                   "type": {
                     "text": "string"
-                  }
+                  },
+                  "description": "Optional text as it will be displayed to the user."
                 }
-              ]
+              ],
+              "description": "Add a new node to the end of expression node array."
             },
             {
               "kind": "method",
-              "name": "_inv",
-              "privacy": "private"
+              "name": "#inputPreviousAnswer",
+              "privacy": "private",
+              "description": "Input the answer to the previous expression into the current expression."
             },
             {
               "kind": "method",
-              "name": "_numToPrecision",
+              "name": "#inputRandomNumber",
+              "privacy": "private",
+              "description": "Add a random number to the end of the expression array. A multiplication operator will be\ninserted before the random number if needed."
+            },
+            {
+              "kind": "method",
+              "name": "#numToPrecision",
               "privacy": "private",
               "parameters": [
                 {
                   "name": "number",
                   "type": {
                     "text": "number"
-                  }
+                  },
+                  "description": "The number to convert."
                 },
                 {
                   "name": "precision",
                   "type": {
                     "text": "number"
-                  }
+                  },
+                  "description": "Maximum precision (redundant zeroes will be stripped)."
                 }
-              ]
+              ],
+              "description": "Convert the given `number` to the given maximum `precision`.",
+              "return": {
+                "type": {
+                  "text": ""
+                }
+              }
             },
             {
               "kind": "method",
-              "name": "_rand",
-              "privacy": "private"
+              "name": "#reset",
+              "privacy": "private",
+              "description": "Reset the application state."
             },
             {
               "kind": "method",
-              "name": "_reset",
-              "privacy": "private"
+              "name": "#toggleAngleUnit",
+              "privacy": "private",
+              "parameters": [
+                {
+                  "name": "unit",
+                  "optional": true,
+                  "type": {
+                    "text": "AngleUnit"
+                  },
+                  "description": "Optional angle unit to enforce (will not toggle if this unit is already active)."
+                }
+              ],
+              "description": "Toggle the angle unit between degrees and radians."
             },
             {
               "kind": "method",
-              "name": "_updateHistory",
-              "privacy": "private"
+              "name": "#toggleTrigFunctions",
+              "privacy": "private",
+              "description": "Toggle between inverted and regular trigonometric functions."
             },
             {
               "kind": "method",
-              "name": "_udpateInput",
-              "privacy": "private"
+              "name": "#updateHistoryDisplay",
+              "privacy": "private",
+              "description": "Update the history text display."
+            },
+            {
+              "kind": "method",
+              "name": "#udpateInputDisplay",
+              "privacy": "private",
+              "description": "Update the input text display."
             },
             {
               "kind": "method",
@@ -441,7 +525,7 @@
               "kind": "field",
               "name": "styles",
               "static": true,
-              "default": "css` :host { font-size: var(--size-medium); font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif; line-height: 1.5; font-weight: 400; color-scheme: light dark; color: rgba(255, 255, 255, 0.87); background-color: #242424; box-sizing: border-box; margin: 0; font-synthesis: none; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; /* Variables */ --height-full: min(150vw, 100vh); --width-full: min(100vw, 67vh); --size-small: min(2.5vw, 1.5vh); --size-medium: min(4vw, 2.5vh); --size-large: min(8vw, 5vh); --screen-height: min(14vw, 8.5vh); --input-height: min(10vw, 6vh); --padding-small: min(1vw, 0.5vh); --padding-medium: min(2vw, 1vh); } .calculator { width: 100%; height: var(--height-full); display: flex; flex-direction: column; align-items: center; justify-content: flex-start; box-sizing: content-box; } .screen { width: var(--width-full); flex: 0 0 var(--screen-height); color: #444; background-color: #FAFAFF; border-radius: var(--padding-medium) var(--padding-medium) 0 0; outline: 1px solid rgba(63, 63, 127, 0.1); } .history { width: 100%; height: var(--size-large); box-sizing: border-box; margin: 0; padding: var(--padding-medium) var(--padding-medium) 0 var(--padding-medium); text-align: left; opacity: 0.6; overflow: hidden; } .input { width: calc(100% - var(--size-large)); height: var(--input-height); border: none; font-size: 2em; padding: var(--size-medium); text-align: right; display: flex; align-items: baseline; justify-content: flex-end; overflow: ellipsis; } .expression { display: flex; flex-direction: row; align-items: center; justify-content: center; position: relative; top: 0; } .auto-complete { opacity: 0.3; } .keyboard { display: flex; flex-direction: column; justify-content: stretch; min-height: 0; flex-grow: 1; width: var(--width-full); cursor: pointer; -moz-user-select: none; -khtml-user-select: none; -webkit-user-select: none; -o-user-select: none; user-select: none; } .key-row { display: flex; flex-direction: row; align-items: stretch; justify-content: space-around; flex: 10%; width: 100%; } .key { display: flex; flex-direction: row; align-items: center; justify-content: center; box-sizing: border-box; width: 100%; padding: var(--padding-small); background-color: #F0F0FF; color: #333; outline: 1px solid rgba(60, 60, 120, 0.1); box-shadow: none; text-align: center; transition: all 0.2s; } .key:hover:not(.disabled) { box-shadow: 0 0 var(--padding-small) 0 rgba(63, 63, 223, 0.5); z-index: 1; } .key:active:not(.disabled), .key.active:not(.disabled) { box-shadow: inset 0 0 var(--padding-small) 0 rgba(63, 63, 223, 0.5); } .key-num { background-color: #FDFDFD; font-size: 1.25em; } .key-oper { background-color: #DFDFFF; font-size: 1.5em; outline: 1px solid rgba(63, 63, 127, 0.25); } .key-enter { background-color: #A0A0F0; color: #fff; font-size: 1.75em; outline: 1px solid rgba(63, 63, 127, 0.5); } .key:disabled, .key.disabled { color: #888; cursor: default; } .bottom-row div:first-child { border-radius: 0 0 0 var(--padding-medium); } .bottom-row div:last-child { border-radius: 0 0 var(--padding-medium) 0; } .inv { display: none; } sup { vertical-align: super; position: relative; top: -0.3em; font-size: 0.67em; } sup.char { /* Make the small x easier to see with slightly larger font. */ font-size: 0.75em; } `"
+              "default": "css` :host { font-size: var(--size-medium); font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif; line-height: 1.5; font-weight: 400; color-scheme: light dark; color: rgba(255, 255, 255, 0.87); background-color: #242424; box-sizing: border-box; margin: 0; font-synthesis: none; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; /* Variables */ --height-full: min(150vw, 100vh); --width-full: min(100vw, 67vh); --size-small: min(2.5vw, 1.5vh); --size-medium: min(4vw, 2.5vh); --size-large: min(8vw, 5vh); --screen-height: min(14vw, 8.5vh); --input-height: min(10vw, 6vh); --padding-small: min(1vw, 0.5vh); --padding-medium: min(2vw, 1vh); } .oneliner { overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; } .calculator { width: 100%; height: var(--height-full); display: flex; flex-direction: column; align-items: center; justify-content: flex-start; box-sizing: content-box; } .screen { width: var(--width-full); flex: 0 0 var(--screen-height); color: #444; background-color: #FAFAFF; border-radius: var(--padding-medium) var(--padding-medium) 0 0; outline: 1px solid rgba(63, 63, 127, 0.1); } .history { width: 100%; height: var(--size-large); box-sizing: border-box; margin: 0; padding: var(--padding-medium) var(--padding-medium) 0 var(--padding-medium); text-align: left; opacity: 0.6; overflow: hidden; } .input { width: calc(100% - var(--size-large)); height: var(--input-height); border: none; font-size: 2em; padding: var(--size-medium); text-align: right; display: flex; align-items: baseline; justify-content: flex-end; overflow: ellipsis; } .expression { display: flex; flex-direction: row; align-items: center; justify-content: center; position: relative; top: 0; } .auto-complete { opacity: 0.3; } .keyboard { display: flex; flex-direction: column; justify-content: stretch; min-height: 0; flex-grow: 1; width: var(--width-full); cursor: pointer; -moz-user-select: none; -khtml-user-select: none; -webkit-user-select: none; -o-user-select: none; user-select: none; } .key-row { display: flex; flex-direction: row; align-items: stretch; justify-content: space-around; flex: 10%; width: 100%; } .key { display: flex; flex-direction: row; align-items: center; justify-content: center; box-sizing: border-box; width: 100%; padding: var(--padding-small); background-color: #F0F0FF; color: #333; outline: 1px solid rgba(60, 60, 120, 0.1); box-shadow: none; text-align: center; transition: all 0.2s; } .key:hover:not(.disabled) { box-shadow: 0 0 var(--padding-small) 0 rgba(63, 63, 223, 0.5); z-index: 1; } .key:active:not(.disabled), .key.active:not(.disabled) { box-shadow: inset 0 0 var(--padding-small) 0 rgba(63, 63, 223, 0.5); } .key-num { background-color: #FDFDFD; font-size: 1.25em; } .key-oper { background-color: #DFDFFF; font-size: 1.5em; outline: 1px solid rgba(63, 63, 127, 0.25); } .key-enter { background-color: #A0A0F0; color: #fff; font-size: 1.75em; outline: 1px solid rgba(63, 63, 127, 0.5); } .key:disabled, .key.disabled { color: #888; cursor: default; } .bottom-row div:first-child { border-radius: 0 0 0 var(--padding-medium); } .bottom-row div:last-child { border-radius: 0 0 var(--padding-medium) 0; } .inv { display: none; } sup { vertical-align: super; position: relative; top: -0.3em; font-size: 0.67em; } sup.char { /* Make the small x easier to see with slightly larger font. */ font-size: 0.75em; } `"
             }
           ],
           "superclass": {

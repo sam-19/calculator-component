@@ -10,6 +10,12 @@ import { customElement, property } from 'lit/decorators.js'
 import { inlineWorker } from './assets'
 
 /**
+ * Unit of angle measurements.
+ * - `deg`: Degrees
+ * - `rad`: Radians
+ */
+type AngleUnit = 'deg' | 'rad'
+/**
  * A single node (or entity) of a mathematical expression.
  * Can be a digit, operator, function name etc.
  */
@@ -26,12 +32,14 @@ type NodeType = 'function' | 'modifier' | 'number' | 'operator' | 'symbol'
  * Properties of a previously evaluated expression.
  */
 type HistoryEntry = {
-    /** The answer of the expression, as it was displayed on the screen; null if there was an error. */
+    /** The answer of the expression; null if there was an error. */
     answer: string | null
     /** The imaginary number part of the answer, or null if the answer was not a complex number. */
     answerImg: number | null
     /** The real number part of the answer, null if there was an error. */
     answerReal: number | null
+    /** Answer as it is displayed to the user. */
+    answerText: string
     /** Error from the expression, null if there was no error. */
     error: string | null
     /** Node array of the expression. */
@@ -51,61 +59,104 @@ export default class BasicCalculator extends LitElement {
 
     constructor () {
         super()
-        worker.addEventListener('message', this._handleWorkerResponse.bind(this))
+        worker.addEventListener('message', this.#handleWorkerResponse.bind(this))
     }
 
     // Properties.
+    /**
+     * Unit of angle measurements, either `deg` for degrees or `rad` for radians.
+     */
     @property({ type: String })
-    angleUnit: 'deg' | 'rad' = 'deg'
-
+    angleUnit: AngleUnit = 'deg'
+    /**
+     * Answer text as returned by mathjs worker. This will contain correct formatting for
+     * complext numbers to insert into new expressions, for example.
+     */
     @property({ type: String })
     answer: string | null = null
-
+    /**
+     * Imaginary component of a complex number answer.
+     */
     @property({ type: Number })
     answerImg: number | null = null
-
+    /**
+     * Real number component of the most recent answer.
+     * In non-complex number answers this is the actual numberic answer.
+     */
     @property({ type: Number })
     answerReal: number | null = null
-
+    /**
+     * The answer text to display to the user.
+     */
+    @property({ type: String })
+    answerText = ''
+    /**
+     * Auto-completion part of the input (basically unclosed parentheses).
+     */
     @property({ type: String })
     autoComplete = ''
-
+    /**
+     * Character to **display** as the decimal separator.
+     */
     @property({ attribute: 'decimal-separator', type: String })
     // Make a guess for the default separator, can be overridden with component attribute.
     decimalSeparator = (0.1).toLocaleString().replace(/\d/g, '')
-
+    /**
+     * Possible error message from the mathjs worker.
+     */
     @property({ type: String })
     error: string | null = null
-
+    /**
+     * Array of input nodes forming the mathematical expression.
+     */
     @property({ type: Array })
     expression: ExpressionNode[] = []
-
+    /**
+     * List of previously evaluated expressions and their answers.
+     */
     @property({ type: Array })
     history: HistoryEntry[] = []
-
+    /**
+     * Most recent entry in the history array parsed as a text string.
+     */
     @property({ type: String })
     historyText = ''
-
+    /**
+     * Use inverse of trigonometric functions (`acos` instead of `cos`etc.).
+     */
     @property({ type: Boolean })
     invTrig = false
-
+    /**
+     * Is the size of the calculator parent element fixed. This will also make the calculator size fixed.
+     * If this property is false
+     * @default false
+     */
     @property({ attribute: 'is-fixed', type: Boolean })
     isFixed = false
-
+    /**
+     * LaTeX expression of the most recent answer.
+     */
     @property({ type: String })
     latex: string | null = null
-
+    /**
+     * Input nodes parsed into text to display on the calculator screen.
+     */
     @property({ type: String })
     screenText = ''
-
+    /**
+     * Character to **display** as a separator between each power of thousand.
+     * @default Empty-space
+     */
     @property({ attribute: 'thousand-separator', type: String })
     thousandSeparator = ' '
-
+    /**
+     * Number of unclosed parentheses in the current input node array (= expression).
+     */
     @property({ type: Number })
     unclosedParentheses = 0
 
     // Getters.
-    private get _modifiersActive () {
+    get #modifiersActive () {
         if (!this.expression.length) {
             // See if can append the modifier into the currently visible answer.
             return (this.answer && this.answerImg === null) ? true : false
@@ -118,7 +169,7 @@ export default class BasicCalculator extends LitElement {
             )
         )
     }
-    private get _operatorsActive () {
+    get #operatorsActive () {
         const incompatibleTypes = ['function', 'modifier', 'operator'] as NodeType[]
         // Expression or function cannot start with an operator (other than the minus sign),
         // and we cannot use multiple operators in a row.
@@ -130,8 +181,23 @@ export default class BasicCalculator extends LitElement {
                )
     }
 
-    // Methods.
-    private _ac () {
+    ////////////////////////////////////////////////////////////////////////////
+    
+    //                                  METHODS
+
+    ////////////////////////////////////////////////////////////////////////////
+    /**
+     * Capitalize a piece of text, i.e. convert the first letter into upper case.
+     * @param text - Text to capitalize.
+     * @returns Capitalized text.
+     */
+    #capitalize (text: string) {
+        return `${text.charAt(0).toLocaleUpperCase()}${text.slice(1)}`
+    }
+    /**
+     * Clear the input node array. If the array is already clear, clear the history.
+     */
+    #clearAll () {
         if (this.expression.length || this.answer) {
             // Clear current expression and answer.
             this.error = null
@@ -139,52 +205,41 @@ export default class BasicCalculator extends LitElement {
             this.answerReal = null
             this.answerImg = null
             this.expression = []
-            this._udpateInput()
+            this.#udpateInputDisplay()
         } else {
             // If there is no expression (second press), reset state.
-            this._reset()
+            this.#reset()
         }
     }
-    private _angle () {
-        this.angleUnit = this.angleUnit === 'deg' ? 'rad' : 'deg'
-        worker.postMessage({ angleUnit: this.angleUnit })
+    /**
+     * Convert dots in the given text into locale-appropriate decimal separators.
+     */
+    #convertDecimalSeparators (text: string) {
+        return text.replace('.', this.decimalSeparator)
     }
-    private _ans () {
-        const lastEntry = this.history[this.history.length - 1]
-        if (!lastEntry?.answer) {
-            return
-        }
-        const ansComplex = this.answerImg === null
-                         ? lastEntry.answerReal?.toString()
-                         : `${this.answerReal}${
-                                this.answerImg < 0 ? '-' : '+'
-                            }${this.answerImg}`
-        // Input simple numbers as is, else wrap in parentheses.
-        if (ansComplex?.match(/[^0-9.]/)) {
-            this._input(`(${ansComplex})`, 'number', 'Ans')
-        } else {
-            this._input(`${ansComplex}`, 'number', 'Ans')
-        }
-    }
-    private _capitalize (text: string) {
-        return `${text.charAt(0).toLocaleUpperCase()}${text.slice(1)}`
-    }
-    private _ce () {
+    /**
+     * Delete the last node or the node at the given index in the expression array.
+     * @param index - Optional index of the node to delete.
+     * @todo Implement an undo feature to reinsert deleted nodes.
+     */
+    #deleteNode (index?: number) {
         if (this.error) {
             this.error = null
         }
         if (this.answer) {
             this.answer = null
-        } else {
+        } else if (index === undefined) {
             this.expression.pop()
+        } else if (index >= 0 && index < this.expression.length) {
+            this.expression.splice(index, 1)
         }
-        this._udpateInput()
+        this.#udpateInputDisplay()
     }
-    /** Convert dots in the given text into locale-appropriate decimal separators. */
-    private _decSep (text: string) {
-        return text.replace('.', this.decimalSeparator)
-    }
-    private _evaluateExpression (e: PointerEvent) {
+    /**
+     * Send the current expression to mathjs worker for evaluation. 
+     * @param e - Pointer event that triggered this action.
+     */
+    #evaluateExpression (e: PointerEvent) {
         if (!this.expression?.length) {
             return
         }
@@ -195,12 +250,18 @@ export default class BasicCalculator extends LitElement {
             round: e.shiftKey,
         })
     }
-    private _formatNumbers (expression: string) {
+    /**
+     * Format numbers in the given expression, converting decimal separators
+     * and inserting possible thousand separators.
+     * @param expression - Expression to format.
+     * @returns The formatted expression.
+     */
+    #formatNumbers (expression: string) {
         if (!this.thousandSeparator) {
             return expression
         }
         const numRegexp = new RegExp(`([0-9]+\\${this.decimalSeparator}?[0-9]*)`)
-        const expParts = expression.split(numRegexp)
+        const expParts = this.#convertDecimalSeparators(expression).split(numRegexp)
         for (let i=1; i<expParts.length; i++) {
             if (!expParts[i].match(numRegexp)) {
                 continue
@@ -232,7 +293,11 @@ export default class BasicCalculator extends LitElement {
         }
         return expParts.join('')
     }
-    private _handleWorkerResponse (message: MessageEvent) {
+    /**
+     * Handle a response from the mathjs worker.
+     * @param message - Message from the worker.
+     */
+    #handleWorkerResponse (message: MessageEvent) {
         if (!message?.data) {
             return
         }
@@ -240,6 +305,7 @@ export default class BasicCalculator extends LitElement {
             this.answer = null
             this.answerReal = null
             this.answerImg = null
+            this.answerText = ''
             this.error = message.data.error
             this.latex = null
         } else if (String(message.data.result) === message.data.expression) {
@@ -249,28 +315,28 @@ export default class BasicCalculator extends LitElement {
             if (Object.hasOwn(message.data.result, 're')) {
                 this.answerReal = message.data.result.re
                 this.answerImg = message.data.result.im
-                this.answer = this._numToPrecision(message.data.result.re as number, 6)
+                this.answer = this.#numToPrecision(message.data.result.re as number, 6)
                 if (message.data.result.im as number < 0) {
-                    this.answer += `-${ this._numToPrecision(-(message.data.result.im as number), 6) }i`
+                    this.answer += `-${ this.#numToPrecision(-(message.data.result.im as number), 6) }i`
                 } else {
-                    this.answer += `+${ this._numToPrecision(message.data.result.im as number, 6) }i`
+                    this.answer += `+${ this.#numToPrecision(message.data.result.im as number, 6) }i`
                 }
                 this.latex = `${
-                    this._decSep(message.data.latex)
+                    this.#convertDecimalSeparators(message.data.latex)
                 } ${message.data.round ? '≈' : '=' } ${
                     this.answer
                 }`
             } else {
                 this.answerReal = message.data.result
                 this.answerImg = null
-                this.answer = this._numToPrecision(message.data.result as number, 12)
+                this.answer = this.#numToPrecision(message.data.result as number, 12)
                 this.latex = `${
-                    this._decSep(message.data.latex)
+                    this.#convertDecimalSeparators(message.data.latex)
                 } ${message.data.round ? '≈' : '=' } ${
-                    this._numToPrecision(message.data.result as number, 9)
+                    this.#numToPrecision(message.data.result as number, 9)
                 }`
             }
-            this.answer = this._formatNumbers(this.answer)
+            this.answerText = this.#formatNumbers(this.answer)
         } 
         const closingParentheses = [] as ExpressionNode[]
         for (let i=0; i<this.unclosedParentheses; i++) {
@@ -285,14 +351,16 @@ export default class BasicCalculator extends LitElement {
             answer: this.answer,
             answerImg: this.answerImg,
             answerReal: this.answerReal,
+            answerText: this.answerText,
             error: this.error,
             expression: fullExpression,
             latex: this.latex,
             round: message.data.round,
         })
         this.expression = []
-        this._udpateInput()
-        this._updateHistory()
+        this.#udpateInputDisplay()
+        this.#updateHistoryDisplay()
+        // Dispatch a custom event for external handling.
         const event = new CustomEvent(
             'result', 
             { 
@@ -311,12 +379,18 @@ export default class BasicCalculator extends LitElement {
         )
         this.dispatchEvent(event)
     }
-    private _input (exp: string, expType: NodeType, display?: string) {
+    /**
+     * Add a new node to the end of expression node array.
+     * @param exp - Expression text that will be parsed by mathjs.
+     * @param expType - Type of the node.
+     * @param display - Optional text as it will be displayed to the user.
+     */
+    #inputNode (exp: string, expType: NodeType, display?: string) {
         // Don't allow inputting certain elements if they are not active.
-        if (expType == 'modifier' && !this._modifiersActive) {
+        if (expType == 'modifier' && !this.#modifiersActive) {
             return
         }
-        if (expType == 'operator' && exp !== '-' && !this._operatorsActive) {
+        if (expType == 'operator' && exp !== '-' && !this.#operatorsActive) {
             return
         }
         if (exp === ')' && this.unclosedParentheses < 1) {
@@ -333,12 +407,13 @@ export default class BasicCalculator extends LitElement {
                 const inputAns = this.answer.match(/[^\d.]/)
                                 ? `(${this.answer})`
                                 : this.answer
-                this._input(inputAns, 'number', inputAns)
+                this.#inputNode(inputAns, 'number', inputAns)
             } else {
                 // Otherwise clear the answer and start a new expression.
                 this.answer = null
                 this.answerReal = null
                 this.answerImg = null
+                this.answerText = ''
             }
         }
         if (this.error) {
@@ -349,34 +424,64 @@ export default class BasicCalculator extends LitElement {
             element: exp,
             type: expType,
         })
-        this._udpateInput()
+        this.#udpateInputDisplay()
     }
-    private _inv () {
-        this.invTrig = !this.invTrig
+    /**
+     * Input the answer to the previous expression into the current expression.
+     */
+    #inputPreviousAnswer () {
+        const lastEntry = this.history[this.history.length - 1]
+        if (!lastEntry?.answer) {
+            return
+        }
+        const ansComplex = this.answerImg === null
+                         ? lastEntry.answerReal?.toString()
+                         : `${this.answerReal}${
+                                this.answerImg < 0 ? '-' : '+'
+                            }${this.answerImg}`
+        // Input simple numbers as is, else wrap in parentheses.
+        if (ansComplex?.match(/[^0-9.]/)) {
+            this.#inputNode(`(${ansComplex})`, 'number', 'Ans')
+        } else {
+            this.#inputNode(`${ansComplex}`, 'number', 'Ans')
+        }
     }
-    private _numToPrecision (number: number, precision: number) {
+    /**
+     * Add a random number to the end of the expression array. A multiplication operator will be
+     * inserted before the random number if needed.
+     */
+    #inputRandomNumber () {
+        const lastItem = this.expression[this.expression.length - 1]
+        const needsMulti = lastItem && (lastItem.element.match(/^[0-9\.]$/) || lastItem.element === ')')
+        if (needsMulti) {
+            this.#inputNode('*', 'operator', '×')
+        }
+        const rnd = Math.random().toFixed(8)
+        this.#inputNode(rnd, 'number', rnd)
+    }
+    /**
+     * Convert the given `number` to the given maximum `precision`.
+     * @param number - The number to convert.
+     * @param precision - Maximum precision (redundant zeroes will be stripped).
+     * @returns The converted number as string.
+     */
+    #numToPrecision (number: number, precision: number) {
         // Strip all-zero decimals.
         let display = number.toPrecision(precision).replace(/\.0+$/, '')
         // Strip zeroes from the end of a decimal.
         if (display.includes('.')) {
             display = display.replace(/0+$/, '')
         }
-        // Return the stripped value with locale-appropriate decimal separator.
-        return this._decSep(display)
+        return display
     }
-    private _rand () {
-        const lastItem = this.expression[this.expression.length - 1]
-        const needsMulti = lastItem && (lastItem.element.match(/^[0-9\.]$/) || lastItem.element === ')')
-        if (needsMulti) {
-            this._input('*', 'operator', '×')
-        }
-        const rnd = Math.random().toFixed(8)
-        this._input(rnd, 'number', rnd)
-    }
-    private _reset () {
+    /**
+     * Reset the application state.
+     */
+    #reset () {
         this.answer = null
         this.answerReal = null
         this.answerImg = null
+        this.answerText = ''
         this.autoComplete = ''
         this.error = null
         this.expression = []
@@ -384,10 +489,30 @@ export default class BasicCalculator extends LitElement {
         this.invTrig = false
         this.latex = null
         this.unclosedParentheses = 0
-        this._udpateInput()
-        this._updateHistory()
+        this.#udpateInputDisplay()
+        this.#updateHistoryDisplay()
     }
-    private _updateHistory () {
+    /**
+     * Toggle the angle unit between degrees and radians.
+     * @param unit - Optional angle unit to enforce (will not toggle if this unit is already active).
+     */
+    #toggleAngleUnit (unit?: AngleUnit) {
+        if (unit && this.angleUnit === unit) {
+            return
+        }
+        this.angleUnit = this.angleUnit === 'deg' ? 'rad' : 'deg'
+        worker.postMessage({ angleUnit: this.angleUnit })
+    }
+    /**
+     * Toggle between inverted and regular trigonometric functions.
+     */
+    #toggleTrigFunctions () {
+        this.invTrig = !this.invTrig
+    }
+    /**
+     * Update the history text display.
+     */
+    #updateHistoryDisplay () {
         if (!this.history.length) {
             this.historyText = ''
             return
@@ -397,15 +522,18 @@ export default class BasicCalculator extends LitElement {
                          + (visibleEntry.expression.length 
                             ? ` ${visibleEntry.round ? '≈' : '=' } ` : ''
                          )
-                         + `${ visibleEntry.error ? 'error' : visibleEntry.answer }`
+                         + `${ visibleEntry.error ? 'error' : visibleEntry.answerText }`
     }
-    private _udpateInput () {
+    /**
+     * Update the input text display.
+     */
+    #udpateInputDisplay () {
         const textParts = [] as string[]
         this.unclosedParentheses = 0
         for (const ex of this.expression) {
             textParts.push(ex.display)
         }
-        this.screenText = this._formatNumbers(textParts.join(''))
+        this.screenText = this.#formatNumbers(textParts.join(''))
         this.unclosedParentheses = (this.screenText.match(/\(/g) || []).length
                                  - (this.screenText.match(/\)/g) || []).length
         if (this.unclosedParentheses > 0) {
@@ -454,10 +582,10 @@ export default class BasicCalculator extends LitElement {
         return html`
         <div class="calculator" part="calculator">
             <div class="screen" part="screen">
-                <div class="history" part="history">${ this.historyText }</div>
-                <div class="input" part="input">
+                <div class="history oneliner" part="history">${ this.historyText }</div>
+                <div class="input oneliner" part="input">
                     <span class="expression" part="expression">
-                        ${ this.error || this.answer || this.screenText }
+                        ${ this.error || this.answerText || this.screenText }
                     </span>
                     <span class="auto-complete" part="auto-complete">
                         ${ this.autoComplete }
@@ -471,28 +599,28 @@ export default class BasicCalculator extends LitElement {
                         part="key key-history"
                         title="Insert random number"
                         aria-label="Insert random number"
-                        @click=${{ handleEvent: () => this._rand() }}
+                        @click=${{ handleEvent: () => this.#inputRandomNumber() }}
                     >Rnd</div>
                     <div
                         class="key key-func"
                         part="key key-func"
                         title="Angle unit: ${ this.angleUnit === 'deg' ? 'degrees' : 'radians' }"
                         aria-label="Angle unit: ${ this.angleUnit === 'deg' ? 'degrees' : 'radians' }"
-                        @click=${{ handleEvent: () => this._angle() }}
-                    >${ this._capitalize(this.angleUnit) }</div>
+                        @click=${{ handleEvent: () => this.#toggleAngleUnit() }}
+                    >${ this.#capitalize(this.angleUnit) }</div>
                     <div
                         class="key key-history"
                         part="key key-history"
                         title="${ this.expression.length ? 'Clear input' : 'Clear history' }"
                         aria-label="${ this.expression.length ? 'Clear input' : 'Clear history' }"
-                        @click=${{ handleEvent: () => this._ac() }}
+                        @click=${{ handleEvent: () => this.#clearAll() }}
                     >AC</div>
                     <div
                         class="key key-history"
                         part="key key-history"
                         title="Remove last entry"
                         aria-label="Remove last entry"
-                        @click=${{ handleEvent: () => this._ce() }}
+                        @click=${{ handleEvent: () => this.#deleteNode() }}
                     >CE</div>
                 </div>
                 <div class="key-row" part="key-row">
@@ -501,28 +629,28 @@ export default class BasicCalculator extends LitElement {
                         part="key key-func"
                         title="Base ten logarithm"
                         aria-label="Base ten logarithm"
-                        @click=${{ handleEvent: () => this._input('log10(', 'function', 'log(') }}
+                        @click=${{ handleEvent: () => this.#inputNode('log10(', 'function', 'log(') }}
                     >log</div>
                     <div
                         class="key key-func"
                         part="key key-func"
                         title="Base e natural logarithm"
                         aria-label="Base e natural logarithm"
-                        @click=${{ handleEvent: () => this._input('log(', 'function', 'ln(') }}
+                        @click=${{ handleEvent: () => this.#inputNode('log(', 'function', 'ln(') }}
                     >ln</div>
                     <div
-                        class="key key-func${this._modifiersActive ? '' : ' disabled' }"
-                        part="key key-func${this._modifiersActive ? '' : ' disabled' }"
+                        class="key key-func${this.#modifiersActive ? '' : ' disabled' }"
+                        part="key key-func${this.#modifiersActive ? '' : ' disabled' }"
                         title="Factorial"
                         aria-label="Factorial"
-                        @click=${{ handleEvent: () => this._input('!', 'modifier') }}
+                        @click=${{ handleEvent: () => this.#inputNode('!', 'modifier') }}
                     >x!</div>
                     <div
-                        class="key key-history${this._modifiersActive ? '' : ' disabled' }"
-                        part="key key-history${this._modifiersActive ? '' : ' disabled' }"
+                        class="key key-history${this.#modifiersActive ? '' : ' disabled' }"
+                        part="key key-history${this.#modifiersActive ? '' : ' disabled' }"
                         title="Imaginary number"
                         aria-label="Imaginary number"
-                        @click=${{ handleEvent: () => this._input('i', 'modifier') }}
+                        @click=${{ handleEvent: () => this.#inputNode('i', 'modifier') }}
                     >xi</div>
                 </div>
                 <div class="key-row" part="key-row">
@@ -531,28 +659,28 @@ export default class BasicCalculator extends LitElement {
                         part="key key-trig"
                         title="Invert trigonometric functions"
                         aria-label="Invert trigonometric functions"
-                        @click=${{ handleEvent: () => this._inv() }}
+                        @click=${{ handleEvent: () => this.#toggleTrigFunctions() }}
                     >Inv</div>
                     <div
                         class="key key-trig"
                         part="key key-trig"
                         title="${ this.invTrig ? 'Inverse sine' : 'Sine' }"
                         aria-label="${ this.invTrig ? 'Inverse sine' : 'Sine' }"
-                        @click=${{ handleEvent: () => this._input(this.invTrig ? 'asin(' : 'sin(', 'function') }}
+                        @click=${{ handleEvent: () => this.#inputNode(this.invTrig ? 'asin(' : 'sin(', 'function') }}
                     >sin<sup class="${ this.invTrig ? '' : 'inv '}">-1</sup></div>
                     <div
                         class="key key-trig"
                         part="key key-trig"
                         title="${ this.invTrig ? 'Inverse cosine' : 'Cosine' }"
                         aria-label="${ this.invTrig ? 'Inverse cosine' : 'Cosine' }"
-                        @click=${{ handleEvent: () => this._input(this.invTrig ? 'acos(' : 'cos(', 'function') }}
+                        @click=${{ handleEvent: () => this.#inputNode(this.invTrig ? 'acos(' : 'cos(', 'function') }}
                     >cos<sup class="${ this.invTrig ? '' : 'inv '}">-1</sup></div>
                     <div
                         class="key key-trig"
                         part="key key-trig"
                         title="${ this.invTrig ? 'Inverse tangent' : 'Tangent' }"
                         aria-label="${ this.invTrig ? 'Inverse tangent' : 'Tangent' }"
-                        @click=${{ handleEvent: () => this._input(this.invTrig ? 'atan(' : 'tan(', 'function') }}
+                        @click=${{ handleEvent: () => this.#inputNode(this.invTrig ? 'atan(' : 'tan(', 'function') }}
                     >tan<sup class="${ this.invTrig ? '' : 'inv '}">-1</sup></div>
                 </div>
                 <div class="key-row" part="key-row">
@@ -561,28 +689,28 @@ export default class BasicCalculator extends LitElement {
                         part="key key-const"
                         title="Pi"
                         aria-label="Pi"
-                        @click=${{ handleEvent: () => this._input('(pi)', 'symbol', 'π') }}
+                        @click=${{ handleEvent: () => this.#inputNode('(pi)', 'symbol', 'π') }}
                     >π</div>
                     <div
                         class="key key-const"
                         part="key key-const"
                         title="Constant e"
                         aria-label="Constant e"
-                        @click=${{ handleEvent: () => this._input('e', 'symbol') }}
+                        @click=${{ handleEvent: () => this.#inputNode('e', 'symbol') }}
                     >e</div>
                     <div
                         class="key key-const"
                         part="key key-const"
                         title="Constant e to the power of"
                         aria-label="Constant e to the power of"
-                        @click=${{ handleEvent: () => this._input('e^', 'function') }}
+                        @click=${{ handleEvent: () => this.#inputNode('e^', 'function') }}
                     >e<sup class="char ">x</sup></div>
                     <div
                         class="key key-const"
                         part="key key-const" 
                         title="Ten to the power of"
                         aria-label="Ten to the power of"
-                        @click=${{ handleEvent: () => this._input('10^', 'function') }}
+                        @click=${{ handleEvent: () => this.#inputNode('10^', 'function') }}
                     >10<sup class="char ">x</sup></div>
                 </div>
                 <div class="key-row" part="key-row">
@@ -591,29 +719,29 @@ export default class BasicCalculator extends LitElement {
                         part="key key-pow"
                         title="Square root"
                         aria-label="Square root"
-                        @click=${{ handleEvent: () => this._input('sqrt(', 'function', '√(') }}
+                        @click=${{ handleEvent: () => this.#inputNode('sqrt(', 'function', '√(') }}
                     >√</div>
                     <div
-                        class="key key-pow${this._modifiersActive ? '' : ' disabled' }"
-                        part="key key-pow${this._modifiersActive ? '' : ' disabled' }"
+                        class="key key-pow${this.#modifiersActive ? '' : ' disabled' }"
+                        part="key key-pow${this.#modifiersActive ? '' : ' disabled' }"
                         title="Input squared"
                         aria-label="Input squared"
-                        @click=${{ handleEvent: () => this._input('^(2)', 'modifier', '²') }}
+                        @click=${{ handleEvent: () => this.#inputNode('^(2)', 'modifier', '²') }}
                     >x<sup>2</sup></div>
                     <div
-                        class="key key-pow${this._modifiersActive ? '' : ' disabled' }"
-                        part="key key-pow${this._modifiersActive ? '' : ' disabled' }"
+                        class="key key-pow${this.#modifiersActive ? '' : ' disabled' }"
+                        part="key key-pow${this.#modifiersActive ? '' : ' disabled' }"
                         title="Cube of input"
                         aria-label="Cube of input"
-                        @click=${{ handleEvent: () => this._input('^(3)', 'modifier', '³') }}
+                        @click=${{ handleEvent: () => this.#inputNode('^(3)', 'modifier', '³') }}
                     >x<sup>3</sup></div>
                     <div
-                        class="key key-pow${this._operatorsActive ? '' : ' disabled' }"
-                        part="key key-pow${this._operatorsActive ? '' : ' disabled' }"
+                        class="key key-pow${this.#operatorsActive ? '' : ' disabled' }"
+                        part="key key-pow${this.#operatorsActive ? '' : ' disabled' }"
                         title="Exponent operator"
                         aria-label="Exponent operator"
                         disabled=""
-                        @click=${{ handleEvent: () => this._input('^', 'operator') }}
+                        @click=${{ handleEvent: () => this.#inputNode('^', 'operator') }}
                     >^</div>
                 </div>
                 <div class="key-row" part="key-row">
@@ -622,28 +750,28 @@ export default class BasicCalculator extends LitElement {
                         part="key key-num"
                         title="Number seven"
                         aria-label="Number seven"
-                        @click=${{ handleEvent: () => this._input('7', 'number') }}
+                        @click=${{ handleEvent: () => this.#inputNode('7', 'number') }}
                     >7</div>
                     <div
                         class="key key-num"
                         part="key key-num"
                         title="Number eight"
                         aria-label="Number eight"
-                        @click=${{ handleEvent: () => this._input('8', 'number') }}
+                        @click=${{ handleEvent: () => this.#inputNode('8', 'number') }}
                     >8</div>
                     <div
                         class="key key-num"
                         part="key key-num"
                         title="Number nine"
                         aria-label="Number nine"
-                        @click=${{ handleEvent: () => this._input('9', 'number') }}
+                        @click=${{ handleEvent: () => this.#inputNode('9', 'number') }}
                     >9</div>
                     <div
-                        class="key key-oper${this._operatorsActive ? '' : ' disabled' }"
-                        part="key key-oper${this._operatorsActive ? '' : ' disabled' }"
+                        class="key key-oper${this.#operatorsActive ? '' : ' disabled' }"
+                        part="key key-oper${this.#operatorsActive ? '' : ' disabled' }"
                         title="Divide"
                         aria-label="Division operator"
-                        @click=${{ handleEvent: () => this._input('/', 'operator', '÷') }}
+                        @click=${{ handleEvent: () => this.#inputNode('/', 'operator', '÷') }}
                     >÷</div>
                 </div>
                 <div class="key-row" part="key-row">
@@ -652,28 +780,28 @@ export default class BasicCalculator extends LitElement {
                         part="key key-num"
                         title="Number four"
                         aria-label="Number four"
-                        @click=${{ handleEvent: () => this._input('4', 'number') }}
+                        @click=${{ handleEvent: () => this.#inputNode('4', 'number') }}
                     >4</div>
                     <div
                         class="key key-num"
                         part="key key-num"
                         title="Number five"
                         aria-label="Number five"
-                        @click=${{ handleEvent: () => this._input('5', 'number') }}
+                        @click=${{ handleEvent: () => this.#inputNode('5', 'number') }}
                     >5</div>
                     <div
                         class="key key-num"
                         part="key key-num"
                         title="Number six"
                         aria-label="Number six"
-                        @click=${{ handleEvent: () => this._input('6', 'number') }}
+                        @click=${{ handleEvent: () => this.#inputNode('6', 'number') }}
                     >6</div>
                     <div
-                        class="key key-oper${this._operatorsActive ? '' : ' disabled' }"
-                        part="key key-oper${this._operatorsActive ? '' : ' disabled' }"
+                        class="key key-oper${this.#operatorsActive ? '' : ' disabled' }"
+                        part="key key-oper${this.#operatorsActive ? '' : ' disabled' }"
                         title="Multiply"
                         aria-label="Multiplication operator"
-                        @click=${{ handleEvent: () => this._input('*', 'operator', '×') }}
+                        @click=${{ handleEvent: () => this.#inputNode('*', 'operator', '×') }}
                     >×</div>
                 </div>
                 <div class="key-row" part="key-row">
@@ -682,28 +810,28 @@ export default class BasicCalculator extends LitElement {
                         part="key"
                         title="Number one"
                         aria-label="Number one"
-                        @click=${{ handleEvent: () => this._input('1', 'number') }}
+                        @click=${{ handleEvent: () => this.#inputNode('1', 'number') }}
                     >1</div>
                     <div
                         class="key key-num"
                         part="key"
                         title="Number two"
                         aria-label="Number two"
-                        @click=${{ handleEvent: () => this._input('2', 'number') }}
+                        @click=${{ handleEvent: () => this.#inputNode('2', 'number') }}
                     >2</div>
                     <div
                         class="key key-num"
                         part="key key-num"
                         title="Number three"
                         aria-label="Number three"
-                        @click=${{ handleEvent: () => this._input('3', 'number') }}
+                        @click=${{ handleEvent: () => this.#inputNode('3', 'number') }}
                     >3</div>
                     <div
                         class="key key-oper"
                         part="key key-oper"
                         title="Substract"
                         aria-label="Substraction operator"
-                        @click=${{ handleEvent: () => this._input('-', 'operator') }}
+                        @click=${{ handleEvent: () => this.#inputNode('-', 'operator') }}
                     >-</div>
                 </div>
                 <div class="key-row" part="key-row">
@@ -712,28 +840,28 @@ export default class BasicCalculator extends LitElement {
                         part="key key-num"
                         title="Number zero"
                         aria-label="Number zero"
-                        @click=${{ handleEvent: () => this._input('0', 'number') }}
+                        @click=${{ handleEvent: () => this.#inputNode('0', 'number') }}
                     >0</div>
                     <div
-                        class="key key-num${this._modifiersActive ? '' : ' disabled' }"
-                        part="key key-num${this._modifiersActive ? '' : ' disabled' }"
+                        class="key key-num${this.#modifiersActive ? '' : ' disabled' }"
+                        part="key key-num${this.#modifiersActive ? '' : ' disabled' }"
                         title="Decimal separator"
                         aria-label="Decimal separator"
-                        @click=${{ handleEvent: () => this._input('.', 'modifier', this.decimalSeparator) }}
+                        @click=${{ handleEvent: () => this.#inputNode('.', 'modifier', this.decimalSeparator) }}
                     >${ this.decimalSeparator }</div>
                     <div
-                        class="key key-num${this._modifiersActive ? '' : ' disabled' }"
-                        part="key key-num${this._modifiersActive ? '' : ' disabled' }"
+                        class="key key-num${this.#modifiersActive ? '' : ' disabled' }"
+                        part="key key-num${this.#modifiersActive ? '' : ' disabled' }"
                         title="Exponent"
                         aria-label="Exponent"
-                        @click=${{ handleEvent: () => this._input('E', 'modifier') }}
+                        @click=${{ handleEvent: () => this.#inputNode('E', 'modifier') }}
                     >E</div>
                     <div
-                        class="key key-oper${this._operatorsActive ? '' : ' disabled' }"
-                        part="key key-oper${this._operatorsActive ? '' : ' disabled' }"
+                        class="key key-oper${this.#operatorsActive ? '' : ' disabled' }"
+                        part="key key-oper${this.#operatorsActive ? '' : ' disabled' }"
                         title="Add"
                         aria-label="Addition operator"
-                        @click=${{ handleEvent: () => this._input('+', 'operator') }}
+                        @click=${{ handleEvent: () => this.#inputNode('+', 'operator') }}
                     >+</div>
                 </div>
                 <div class="key-row bottom-row" part="key-row bottom-row">
@@ -742,28 +870,28 @@ export default class BasicCalculator extends LitElement {
                         part="key key-par"
                         title="Open parentheses"
                         aria-label="Open parentheses"
-                        @click=${{ handleEvent: () => this._input('(', 'symbol') }}
+                        @click=${{ handleEvent: () => this.#inputNode('(', 'symbol') }}
                     >(</div>
                     <div
                         class="key key-par${this.unclosedParentheses > 0 ? '' : ' disabled' }"
                         part="key key-par${this.unclosedParentheses > 0 ? '' : ' disabled' }"
                         title="Close parentheses"
                         aria-label="Close parentheses"
-                        @click=${{ handleEvent: () => this._input(')', 'symbol') }}
+                        @click=${{ handleEvent: () => this.#inputNode(')', 'symbol') }}
                     >)</div>
                     <div
                         class="key key-ans${ this.history.length > 0 ? '' : ' disabled' }"
                         part="key key-ans${ this.history.length > 0 ? '' : ' disabled' }"
                         title="Insert previous answer"
                         aria-label="Insert previous answer"
-                        @click=${{ handleEvent: () => this._ans() }}
+                        @click=${{ handleEvent: () => this.#inputPreviousAnswer() }}
                     >Ans</div>
                     <div
                         class="key key-enter"
                         part="key key-enter"
                         title="Calculate answer"
                         aria-label="Calculate answer"
-                        @click=${{ handleEvent: (e: PointerEvent) => this._evaluateExpression(e) }}
+                        @click=${{ handleEvent: (e: PointerEvent) => this.#evaluateExpression(e) }}
                     >=</div>
                 </div>
             </div>
@@ -801,6 +929,11 @@ export default class BasicCalculator extends LitElement {
         --input-height: min(10vw, 6vh);
         --padding-small: min(1vw, 0.5vh);
         --padding-medium: min(2vw, 1vh);
+    }
+    .oneliner {
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        white-space: nowrap !important;
     }
     .calculator {
         width: 100%;
