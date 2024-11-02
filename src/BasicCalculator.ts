@@ -54,6 +54,12 @@ import workerSrc from '../dist/mathjs-worker?raw'
 
 const worker = inlineWorker('mathjs-worker', workerSrc)
 
+const multiplier = {
+    display: '×',
+    element: '*',
+    type: 'operator',
+} as ExpressionNode
+
 @customElement('basic-calculator')
 export default class BasicCalculator extends LitElement {
 
@@ -418,6 +424,13 @@ export default class BasicCalculator extends LitElement {
         }
         if (this.error) {
             this.error = null
+        }
+        if (this.expression.length) {
+            const prevNode = this.expression[this.expression.length - 1]
+            // If a number precedes a function input, add a multilication operator for clarity.
+            if (expType === 'function' && prevNode.type === 'number') {
+                this.expression.push({...multiplier})
+            }
         }
         this.expression.push({
             display: display || exp,
